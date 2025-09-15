@@ -21,7 +21,9 @@ class NewsAggregatorCLI:
         """Initialize the CLI with the specified model provider"""
         self.model_provider = model_provider
         self.agent = None
+        self.react_app = None
         self.session_active = True
+        self.thread_id = "cli_default"
         
     def initialize_agent(self):
         """Initialize the news aggregation agent"""
@@ -52,6 +54,7 @@ class NewsAggregatorCLI:
         print("• Type 'help' for more information")
         print("• Type 'quit' or 'exit' to end the session")
         print("• Type 'clear' to clear the screen")
+        print("• Type 'thread <id>' to set conversation thread id")
         print("="*60)
     
     def display_help(self):
@@ -77,19 +80,10 @@ class NewsAggregatorCLI:
             if not self.agent:
                 return "❌ Agent not initialized. Please restart the application."
             
-            # Prepare the message for the agent
-            messages = {"messages": [query]}
-            
-            # Get response from the agent
-            output = self.react_app.invoke(messages)
-            
-            # Extract the final response
-            if isinstance(output, dict) and "messages" in output:
-                final_output = output["messages"][-1].content
-            else:
-                final_output = str(output)
-            
-            return final_output
+            result = self.agent.run_with_memory(query, thread_id=self.thread_id)
+            if "error" in result:
+                return f"❌ {result['error']}"
+            return result.get("response", "")
             
         except Exception as e:
             return f"❌ Error processing query: {str(e)}"
@@ -146,11 +140,16 @@ class NewsAggregatorCLI:
                     self.display_welcome()
                     continue
                 
+                elif user_input.lower().startswith('thread '):
+                    self.thread_id = user_input.split(' ', 1)[1].strip() or self.thread_id
+                    print(f"✅ Thread set to: {self.thread_id}")
+                    continue
+                
                 elif not user_input:
                     print("Please enter a question or command.")
                     continue
                 
-                # Process the query
+                # Process the query using memory-configured run
                 print("\n🔄 Searching for news... Please wait...")
                 response = self.process_query(user_input)
                 

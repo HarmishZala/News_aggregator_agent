@@ -22,6 +22,7 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     question: str
     model_provider: str = "groq"  # Default to groq
+    thread_id: str | None = None
 
 @app.post("/query")
 async def query_news_agent(query: QueryRequest):
@@ -50,20 +51,25 @@ async def query_news_agent(query: QueryRequest):
         except Exception as graph_error:
             print(f"Warning: Could not generate graph: {graph_error}")
 
-        # Process the query
-        messages = {"messages": [query.question]}
-        output = react_app.invoke(messages)
+        # Use helper that passes checkpointer config
+        thread_id = query.thread_id or "api_default"
+        result = graph.run_with_memory(query.question, thread_id=thread_id)
 
-        # Extract the final response
-        if isinstance(output, dict) and "messages" in output:
-            final_output = output["messages"][-1].content  # Last AI response
-        else:
-            final_output = str(output)
+        if "error" in result:
+            return JSONResponse(
+                status_code=500, 
+                content={
+                    "error": result["error"],
+                    "timestamp": datetime.datetime.now().isoformat()
+                }
+            )
         
         return {
-            "answer": final_output,
-            "timestamp": datetime.datetime.now().isoformat(),
-            "model_provider": query.model_provider
+            "answer": result.get("response", ""),
+            "timestamp": result.get("timestamp", datetime.datetime.now().isoformat()),
+            "model_provider": query.model_provider,
+            "thread_id": thread_id,
+            "memory_enabled": result.get("memory_enabled", False)
         }
         
     except Exception as e:

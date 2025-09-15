@@ -14,5 +14,6 @@ langgraph
 python-dateutil
 colorama
 rich
+newsapi-python
 
 -e .
