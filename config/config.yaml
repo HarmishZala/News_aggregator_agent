@@ -1,0 +1,47 @@
+llm:
+  openai:
+    provider: "openai"
+    model_name: "gpt-4o-mini"
+  groq:
+    provider: "groq"
+    model_name: "deepseek-r1-distill-llama-70b"
+
+news_sources:
+  general:
+    - "Associated Press"
+    - "Reuters"
+    - "BBC News"
+    - "CNN"
+    - "The Guardian"
+    - "NPR"
+  
+  technology:
+    - "TechCrunch"
+    - "Ars Technica"
+    - "The Verge"
+    - "Wired"
+    - "Engadget"
+    - "VentureBeat"
+  
+  business:
+    - "Bloomberg"
+    - "Reuters Business"
+    - "CNBC"
+    - "Wall Street Journal"
+    - "Financial Times"
+    - "MarketWatch"
+  
+  professional:
+    - "LinkedIn"
+    - "Medium"
+    - "Harvard Business Review"
+    - "MIT Technology Review"
+
+api_limits:
+  tavily:
+    max_results: 10
+    timeout: 30
+  
+  newsapi:
+    max_results: 10
+    timeout: 30
