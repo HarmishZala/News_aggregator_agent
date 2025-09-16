@@ -6,6 +6,9 @@ llm:
     provider: "groq"
     model_name: "deepseek-r1-distill-llama-70b"
 
+default_model_provider: "groq"
+default_language: "en-US"
+
 news_sources:
   general:
     - "Associated Press"
@@ -45,3 +48,27 @@ api_limits:
   newsapi:
     max_results: 10
     timeout: 30
+
+speech_recognition:
+  default_language: "en-US"
+  supported_languages:
+    - "en-US"
+    - "en-GB"
+    - "es-ES"
+    - "fr-FR"
+    - "de-DE"
+    - "it-IT"
+    - "pt-BR"
+    - "ru-RU"
+    - "ja-JP"
+    - "ko-KR"
+    - "zh-CN"
+  energy_threshold: 300
+  pause_threshold: 0.8
+  phrase_threshold: 0.3
+  non_speaking_duration: 0.8
+
+memory:
+  enabled: true
+  default_thread_id: "default"
+  max_conversation_length: 50

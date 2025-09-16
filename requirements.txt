@@ -15,5 +15,8 @@ python-dateutil
 colorama
 rich
 newsapi-python
+speechrecognition
+pydub
+pyaudio
 
 -e .
