@@ -20,3 +20,5 @@ pydub
 pyaudio
 
 -e .
+pyttsx3
+langsmith
