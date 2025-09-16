@@ -135,14 +135,30 @@ class SpeechToTextProcessor:
                 "engine": "none"
             }
     
-    def transcribe_microphone(self, duration: int = 5, language: str = "en-US") -> Dict[str, Any]:
+    def list_microphones(self) -> Dict[str, Any]:
+        """Return available microphone device names and indices."""
+        try:
+            names = sr.Microphone.list_microphone_names()
+            devices = [{"index": idx, "name": name} for idx, name in enumerate(names)]
+            return {"success": True, "devices": devices}
+        except Exception as e:
+            return {"success": False, "error": str(e), "devices": []}
+
+    def transcribe_microphone(self, duration: int = 5, language: str = "en-US", device_index: Optional[int] = None, start_timeout: Optional[float] = 8.0) -> Dict[str, Any]:
         """Transcribe audio from microphone"""
         try:
-            with sr.Microphone() as source:
+            with sr.Microphone(device_index=device_index) as source:
                 print("Adjusting for ambient noise...")
-                self.recognizer.adjust_for_ambient_noise(source, duration=1)
+                calibration_duration = self.speech_config.get('calibration_duration', 1.5)
+                self.recognizer.adjust_for_ambient_noise(source, duration=calibration_duration)
                 print(f"Listening for {duration} seconds...")
-                audio = self.recognizer.listen(source, timeout=duration, phrase_time_limit=duration)
+                effective_timeout = None if (start_timeout is None or start_timeout <= 0) else start_timeout
+                effective_phrase_limit = None if (duration is None or duration <= 0) else duration
+                audio = self.recognizer.listen(
+                    source,
+                    timeout=effective_timeout,
+                    phrase_time_limit=effective_phrase_limit,
+                )
             
             # Try Google Speech Recognition first
             try:
@@ -163,6 +179,14 @@ class SpeechToTextProcessor:
                         "confidence": "low",
                         "engine": "none"
                     }
+            except sr.WaitTimeoutError:
+                return {
+                    "success": False,
+                    "error": "listening timed out while waiting for phrase to start",
+                    "text": "",
+                    "confidence": "low",
+                    "engine": "none"
+                }
             
             return {
                 "success": True,
@@ -185,7 +209,7 @@ class SpeechToTextProcessor:
 speech_processor = SpeechToTextProcessor()
 
 @tool
-def transcribe_audio_file(audio_file_path: str, language: str = None) -> str:
+def transcribe_audio_file(audio_file_path: str, language: Optional[str] = None) -> str:
     """
     Transcribe speech from an audio file to text.
     
@@ -219,7 +243,7 @@ def transcribe_audio_file(audio_file_path: str, language: str = None) -> str:
         return f"Error processing audio file: {str(e)}"
 
 @tool
-def transcribe_audio_from_microphone(duration: int = 5, language: str = None) -> str:
+def transcribe_audio_from_microphone(duration: int = 5, language: Optional[str] = None, device_index: Optional[int] = None, start_timeout: Optional[float] = None) -> str:
     """
     Transcribe speech from microphone input to text.
     
@@ -239,18 +263,45 @@ def transcribe_audio_from_microphone(duration: int = 5, language: str = None) ->
         if language not in speech_processor.supported_languages:
             return f"Error: Unsupported language '{language}'. Supported languages: {speech_processor.supported_languages}"
         
-        result = speech_processor.transcribe_microphone(duration, language)
+        # Treat start_timeout <= 0 as wait indefinitely for phrase start
+        effective_start_timeout = None if (start_timeout is not None and start_timeout <= 0) else (start_timeout if start_timeout is not None else 12.0)
+        result = speech_processor.transcribe_microphone(
+            duration,
+            language,
+            device_index=device_index,
+            start_timeout=effective_start_timeout,
+        )
         
         if result["success"]:
             return f"Transcription successful using {result['engine']} engine:\n\n{result['text']}"
         else:
-            return f"Transcription failed: {result['error']}"
+            guidance = ""  # Provide actionable hint on timeout
+            if "timed out" in str(result.get('error', '')).lower():
+                guidance = "\nHint: try 'mics' to choose the correct device, or increase start_timeout (e.g., 'listen 8 en-US 0 15' or use 0 to wait indefinitely)."
+            return f"Transcription failed: {result['error']}{guidance}"
             
     except Exception as e:
         return f"Error processing microphone input: {str(e)}"
 
 @tool
-def transcribe_base64_audio(audio_base64: str, input_format: str = "wav", language: str = None) -> str:
+def list_microphones() -> str:
+    """
+    List available microphone devices and their indices.
+    """
+    try:
+        result = speech_processor.list_microphones()
+        if not result["success"]:
+            return f"Error listing microphones: {result['error']}"
+        devices = result["devices"]
+        if not devices:
+            return "No microphones found."
+        lines = [f"[{d['index']}] {d['name']}" for d in devices]
+        return "Available microphones:\n" + "\n".join(lines)
+    except Exception as e:
+        return f"Error listing microphones: {str(e)}"
+
+@tool
+def transcribe_base64_audio(audio_base64: str, input_format: str = "wav", language: Optional[str] = None) -> str:
     """
     Transcribe speech from base64 encoded audio data to text.
     
@@ -288,5 +339,6 @@ def transcribe_base64_audio(audio_base64: str, input_format: str = "wav", langua
 speech_tool_list = [
     transcribe_audio_file,
     transcribe_audio_from_microphone,
-    transcribe_base64_audio
+    transcribe_base64_audio,
+    list_microphones
 ]

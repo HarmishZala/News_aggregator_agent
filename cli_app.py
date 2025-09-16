@@ -10,6 +10,8 @@ import datetime
 from typing import Optional
 from dotenv import load_dotenv
 from agent.agentic_workflow import GraphBuilder
+from utils.config_loader import load_config
+from tools.speech_tools import transcribe_audio_from_microphone, list_microphones
 
 # Load environment variables
 load_dotenv()
@@ -24,6 +26,10 @@ class NewsAggregatorCLI:
         self.react_app = None
         self.session_active = True
         self.thread_id = "cli_default"
+        self.config = load_config()
+        self.default_language = (
+            self.config.get("speech_recognition", {}).get("default_language", "en-US")
+        )
         
     def initialize_agent(self):
         """Initialize the news aggregation agent"""
@@ -55,6 +61,8 @@ class NewsAggregatorCLI:
         print("• Type 'quit' or 'exit' to end the session")
         print("• Type 'clear' to clear the screen")
         print("• Type 'thread <id>' to set conversation thread id")
+        print("• Type 'listen [seconds] [lang] [device_index] [start_timeout]' to speak (e.g., 'listen 5 en-US 0 8')")
+        print("• Type 'mics' to list available microphones")
         print("="*60)
     
     def display_help(self):
@@ -134,10 +142,55 @@ class NewsAggregatorCLI:
                 elif user_input.lower() == 'help':
                     self.display_help()
                     continue
+                elif user_input.lower().startswith('listen'):
+                    parts = user_input.split()
+                    duration = 5
+                    language = self.default_language
+                    device_index = None
+                    start_timeout = None
+                    if len(parts) >= 2 and parts[1].isdigit():
+                        duration = int(parts[1])
+                    if len(parts) >= 3:
+                        language = parts[2]
+                    if len(parts) >= 4 and parts[3].isdigit():
+                        device_index = int(parts[3])
+                    if len(parts) >= 5:
+                        try:
+                            start_timeout = float(parts[4])
+                        except ValueError:
+                            start_timeout = None
+
+                    device_msg = f", device={device_index}" if device_index is not None else ""
+                    timeout_msg = f", start_timeout={start_timeout}" if start_timeout is not None else ""
+                    print(f"\n🎙️  Microphone: ON  (listening for {duration}s, lang={language}{device_msg}{timeout_msg})")
+                    print("(Adjusting for ambient noise, then listening...)")
+                    payload = {"duration": duration, "language": language}
+                    if device_index is not None:
+                        payload["device_index"] = device_index
+                    if start_timeout is not None:
+                        payload["start_timeout"] = start_timeout
+                    transcript = transcribe_audio_from_microphone.invoke(payload)
+                    print("🔇 Microphone: OFF")
+
+                    if "Transcription successful" in transcript:
+                        spoken_text = transcript.split("\n\n")[-1]
+                        print(f"🗣️  You said: {spoken_text}")
+                        print("\n🔄 Processing your spoken query...")
+                        response = self.process_query(spoken_text)
+                        formatted_response = self.format_response(response)
+                        print(formatted_response)
+                    else:
+                        print(f"❌ {transcript}")
+                    continue
                 
                 elif user_input.lower() == 'clear':
                     self.clear_screen()
                     self.display_welcome()
+                    continue
+                
+                elif user_input.lower() == 'mics':
+                    listing = list_microphones.invoke({})
+                    print(listing)
                     continue
                 
                 elif user_input.lower().startswith('thread '):
