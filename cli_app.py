@@ -8,15 +8,25 @@ import os
 import sys
 import datetime
 from typing import Optional
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 from agent.agentic_workflow import GraphBuilder
 from utils.config_loader import load_config
 from tools.speech_tools import transcribe_audio_from_microphone, list_microphones
 from tools.tts_tools import speak_text, list_tts_voices
-from utils.debug import enable_langchain_debug, enable_langsmith, open_langsmith_dashboard
+from utils.debug import enable_langchain_debug, enable_langsmith, open_langsmith_dashboard, trace_status_string
+from utils.evaluate import run_simple_evaluation
 
-# Load environment variables
-load_dotenv()
+# Load environment variables robustly: prefer module-local .env, then fall back
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+_module_env = os.path.join(_script_dir, ".env")
+if os.path.exists(_module_env):
+    load_dotenv(dotenv_path=_module_env, override=True)
+else:
+    dotenv_path = find_dotenv(usecwd=True)
+    if dotenv_path:
+        load_dotenv(dotenv_path=dotenv_path, override=True)
+    else:
+        load_dotenv(override=True)
 
 class NewsAggregatorCLI:
     """Command-line interface for the News Aggregator Agent"""
@@ -69,7 +79,9 @@ class NewsAggregatorCLI:
         print("• Type 'voices' to list TTS voices")
         print("• Type 'debug on|off' to toggle LangChain debug logs")
         print("• Type 'trace on|off [project]' to toggle LangSmith tracing")
+        print("• Type 'trace status' to show tracing/env status")
         print("• Type 'dashboard' to open the LangSmith dashboard")
+        print("• Type 'eval [file.json]' to run a quick evaluation")
         print("="*60)
     
     def display_help(self):
@@ -134,9 +146,15 @@ class NewsAggregatorCLI:
         print(f"\n🤖 Agent ready! Using {self.model_provider.upper()} model.")
         print("Type your question or 'help' for assistance.\n")
         last_agent_response: Optional[str] = None
-        # Auto-open dashboard if tracing is already enabled at start
-        if os.getenv('LANGCHAIN_TRACING_V2', 'false').lower() == 'true':
-            open_langsmith_dashboard(os.getenv('LANGCHAIN_PROJECT'))
+        # Normalize LANGSMITH_* to LANGCHAIN_* and auto-open dashboard if tracing enabled via .env
+        # Support both legacy and current env names
+        lm_trace = os.getenv('LANGSMITH_TRACING') or os.getenv('LANGCHAIN_TRACING_V2')
+        tracing_on = str(lm_trace).lower() in ['1', 'true', 'yes']
+        if tracing_on:
+            api_key = os.getenv('LANGCHAIN_API_KEY') or os.getenv('LANGSMITH_API_KEY')
+            project = os.getenv('LANGCHAIN_PROJECT') or os.getenv('LANGSMITH_PROJECT')
+            enable_langsmith(api_key=api_key, project=project, enabled=True)
+            open_langsmith_dashboard(project)
         
         # Main interaction loop
         while self.session_active:
@@ -218,6 +236,9 @@ class NewsAggregatorCLI:
 
                 elif user_input.lower().startswith('trace '):
                     parts = user_input.split()
+                    if len(parts) > 1 and parts[1].lower() == 'status':
+                        print(trace_status_string())
+                        continue
                     on = parts[1].lower() == 'on' if len(parts) > 1 else False
                     project = parts[2] if len(parts) > 2 else None
                     api_key = os.getenv('LANGCHAIN_API_KEY') or os.getenv('LANGSMITH_API_KEY')
@@ -231,6 +252,12 @@ class NewsAggregatorCLI:
 
                 elif user_input.lower() == 'dashboard':
                     open_langsmith_dashboard(os.getenv('LANGCHAIN_PROJECT'))
+                    continue
+
+                elif user_input.lower().startswith('eval'):
+                    parts = user_input.split()
+                    file_path = parts[1] if len(parts) > 1 else None
+                    run_simple_evaluation(self, file_path)
                     continue
                 
                 elif user_input.lower().startswith('speak'):

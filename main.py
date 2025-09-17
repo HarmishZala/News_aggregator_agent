@@ -7,8 +7,16 @@ import datetime
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from utils.config_loader import load_config
+from utils.debug import enable_langsmith, open_langsmith_dashboard
 
 load_dotenv()
+# Normalize LANGSMITH_* to LANGCHAIN_* and enable tracing if requested
+lm_trace = os.getenv('LANGSMITH_TRACING') or os.getenv('LANGCHAIN_TRACING_V2')
+tracing_on = str(lm_trace).lower() in ['1', 'true', 'yes']
+if tracing_on:
+    api_key = os.getenv('LANGCHAIN_API_KEY') or os.getenv('LANGSMITH_API_KEY')
+    project = os.getenv('LANGCHAIN_PROJECT') or os.getenv('LANGSMITH_PROJECT')
+    enable_langsmith(api_key=api_key, project=project, enabled=True)
 config = load_config()
 
 app = FastAPI(title="News Aggregator Agent API", version="1.0.0")

@@ -75,3 +75,4 @@ def speak_text(text: str, voice_id: Optional[str] = None, rate: Optional[int] = 
         return f"Error speaking text: {str(e)}"
 
 
+
